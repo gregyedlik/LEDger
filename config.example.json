@@ -1,0 +1,18 @@
+{
+  "web": {
+    "port": 3003
+  },
+  "mqtt": {
+    "port": 46524,
+    "password": "REPLACE_WITH_LONG_RANDOM_MQTT_PASSWORD"
+  },
+  "auth": {
+    "apiKey": "REPLACE_WITH_API_KEY",
+    "manualReadingPassword": "REPLACE_WITH_MANUAL_READING_PASSWORD"
+  },
+  "paths": {
+    "db": "server/meter.db",
+    "readings": "server/readings.json",
+    "backups": "server/backups"
+  }
+}

@@ -1,0 +1,27 @@
+# LEDger Electricity Meter — ESP32-C3 Client Configuration
+#
+# Copy this file to config.py and fill in your values:
+#   cp config.py.example config.py
+#
+# config.py is gitignored and never touched by OTA updates — your
+# credentials survive every firmware release.
+
+# WiFi credentials
+WIFI_SSID = "YOUR_WIFI_SSID"
+WIFI_PASSWORD = "YOUR_WIFI_PASSWORD"
+
+# MQTT broker (the meter server's own embedded aedes broker).
+# Use whatever public TCP port you opened on the server, and set the same
+# value as MQTT_PORT in the server's config too.
+MQTT_HOST = "your-server.example.com"
+MQTT_PORT = 46524
+
+# Broker credentials — must match the server's MQTT_PASSWORD env var.
+# Set both to None if the broker runs without authentication.
+MQTT_USER = "meter"
+MQTT_PASSWORD = "CHANGE_ME_TO_A_SECRET"
+
+# OTA firmware updates: the meter server's /meter/api/ota endpoints.
+# Leave unset to disable self-updating on this device.
+OTA_BASE = "https://your-domain.example.com/meter/api/ota"
+OTA_CHECK_INTERVAL = 21600  # check every 6 hours (seconds)

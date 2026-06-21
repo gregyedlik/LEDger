@@ -1,0 +1,8 @@
+node_modules/
+meter.db
+*.db
+.DS_Store
+client-meter-esp32/config.py
+config.json
+__pycache__/
+.claude/

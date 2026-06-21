@@ -1,0 +1,3 @@
+[submodule "holdfast"]
+	path = holdfast
+	url = https://github.com/gregyedlik/micropython-holdfast.git

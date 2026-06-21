@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "files": [
+    "boot.py",
+    "holdfast/__init__.py",
+    "holdfast/mqtt.py",
+    "holdfast/net.py",
+    "holdfast/ota.py",
+    "holdfast/supervisor.py",
+    "main.py"
+  ]
+}

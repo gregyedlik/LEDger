@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#f4f8f5">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <title>LEDger Admin</title>
+  <style>
+    :root {
+      --bg:        #f4f8f5;
+      --surface:   #ffffff;
+      --surface2:  #eaf3ec;
+      --border:    #c8ddd0;
+      --green:     #3a9d5c;
+      --green-dim: #2d8049;
+      --green-bright: #5cb878;
+      --text:      #2c3e35;
+      --text-dim:  #6b8f7b;
+      --yellow:    #d4940a;
+      --red:       #c93b3b;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container { max-width: 800px; margin: 0 auto; }
+
+    h1 {
+      font-size: 1.2rem;
+      color: var(--green);
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .auth-form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    input, select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    input:focus { border-color: var(--green); }
+
+    button {
+      background: var(--green);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      cursor: pointer;
+    }
+
+    button:hover { background: var(--green-dim); }
+    button.danger { background: var(--red); }
+    button.danger:hover { background: #b33030; }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar .info {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-left: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    th {
+      text-align: left;
+      color: var(--text-dim);
+      font-weight: 500;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(200, 221, 208, 0.5);
+    }
+
+    tr:hover { background: rgba(200, 221, 208, 0.3); }
+
+    .cb { width: 18px; height: 18px; cursor: pointer; accent-color: var(--green); }
+
+    .pagination {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+
+    .msg {
+      font-size: 0.85rem;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+
+    .msg.ok { background: rgba(58, 157, 92, 0.1); color: var(--green); }
+    .msg.err { background: rgba(201, 59, 59, 0.1); color: var(--red); }
+
+    #content { display: none; }
+
+    /* ── Sections ────────────────────────────────── */
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .outage-none {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>LEDger Admin</h1>
+
+    <div class="auth-form">
+      <input type="password" id="api-key" placeholder="API key">
+      <button onclick="authenticate()">Load</button>
+    </div>
+
+    <div id="msg"></div>
+
+    <div id="content">
+      <!-- Outages section -->
+      <div class="section" id="outages-section" style="display:none;">
+        <h2>Outages (last 30 days)</h2>
+        <div id="outages-body"></div>
+      </div>
+
+      <!-- Pulse Records section -->
+      <div class="section">
+        <h2>Pulse Records</h2>
+        <div class="toolbar">
+          <button class="danger" onclick="deleteSelected()">Delete selected</button>
+          <label style="font-size:0.8rem; color:var(--text-dim)">
+            <input type="checkbox" class="cb" id="select-all" onchange="toggleAll()"> Select all on page
+          </label>
+          <span class="info" id="total-info"></span>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>ID</th>
+              <th>Count (Wh)</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+
+        <div class="pagination">
+          <button onclick="prevPage()">&larr; Prev</button>
+          <span id="page-info"></span>
+          <button onclick="nextPage()">Next &rarr;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/meter/api';
+    let apiKey = '';
+    let currentPage = 0;
+    let totalRecords = 0;
+    const perPage = 50;
+
+    function showMsg(text, ok) {
+      const el = document.getElementById('msg');
+      el.className = 'msg ' + (ok ? 'ok' : 'err');
+      el.textContent = text;
+      setTimeout(() => el.textContent = '', 4000);
+    }
+
+    function formatDate(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatDuration(sec) {
+      if (sec < 60) return sec + 's';
+      if (sec < 3600) return Math.floor(sec / 60) + 'min';
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      return h + 'h ' + (m > 0 ? m + 'min' : '');
+    }
+
+    async function apiFetch(path, opts = {}) {
+      const res = await fetch(API_BASE + path, {
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+          ...(opts.headers || {}),
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    async function authenticate() {
+      apiKey = document.getElementById('api-key').value;
+      if (!apiKey) return;
+      try {
+        await loadPage(0);
+        await loadOutages();
+        document.getElementById('content').style.display = 'block';
+      } catch (e) {
+        showMsg('Auth failed: ' + e.message, false);
+      }
+    }
+
+    async function loadOutages() {
+      try {
+        const res = await fetch(`${API_BASE}/data`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const section = document.getElementById('outages-section');
+        const body = document.getElementById('outages-body');
+
+        if (data.outages && data.outages.length > 0) {
+          section.style.display = 'block';
+          body.innerHTML = `
+            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+              <thead>
+                <tr>
+                  <th style="text-align:left; color:var(--text-dim); font-weight:500; padding:8px 12px; border-bottom:1px solid var(--border); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Start</th>
+                  <th style="text-align:left; color:var(--text-dim); font-weight:500; padding:8px 12px; border-bottom:1px solid var(--border); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">End</th>
+                  <th style="text-align:left; color:var(--text-dim); font-weight:500; padding:8px 12px; border-bottom:1px solid var(--border); font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Duration</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.outages.map(o => `
+                  <tr>
+                    <td style="padding:8px 12px; border-bottom:1px solid rgba(200,221,208,0.5);">${formatDate(o.start_time)}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid rgba(200,221,208,0.5);">${formatDate(o.end_time)}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid rgba(200,221,208,0.5);">${formatDuration(o.duration_sec)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `;
+        } else {
+          section.style.display = 'block';
+          body.innerHTML = '<p class="outage-none">No outages in the last 30 days.</p>';
+        }
+      } catch (e) {
+        console.error('Failed to load outages:', e);
+      }
+    }
+
+    async function loadPage(page) {
+      const data = await apiFetch(`/admin/pulses?page=${page}&limit=${perPage}`);
+      totalRecords = data.total;
+      currentPage = page;
+
+      document.getElementById('total-info').textContent =
+        `${totalRecords} records total`;
+      document.getElementById('page-info').textContent =
+        `Page ${page + 1} of ${Math.max(1, Math.ceil(totalRecords / perPage))}`;
+      document.getElementById('select-all').checked = false;
+
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = data.rows.map(r => `
+        <tr>
+          <td><input type="checkbox" class="cb row-cb" data-id="${r.id}"></td>
+          <td>${r.id}</td>
+          <td>${r.count}</td>
+          <td>${r.timestamp}</td>
+        </tr>
+      `).join('');
+    }
+
+    function toggleAll() {
+      const checked = document.getElementById('select-all').checked;
+      document.querySelectorAll('.row-cb').forEach(cb => cb.checked = checked);
+    }
+
+    async function deleteSelected() {
+      const ids = [...document.querySelectorAll('.row-cb:checked')]
+        .map(cb => parseInt(cb.dataset.id));
+
+      if (ids.length === 0) {
+        showMsg('Nothing selected.', false);
+        return;
+      }
+
+      if (!confirm(`Delete ${ids.length} pulse record(s)?`)) return;
+
+      try {
+        await apiFetch('/admin/pulses', {
+          method: 'DELETE',
+          body: JSON.stringify({ ids }),
+        });
+        showMsg(`Deleted ${ids.length} records.`, true);
+        await loadPage(currentPage);
+      } catch (e) {
+        showMsg('Delete failed: ' + e.message, false);
+      }
+    }
+
+    function prevPage() {
+      if (currentPage > 0) loadPage(currentPage - 1);
+    }
+
+    function nextPage() {
+      if ((currentPage + 1) * perPage < totalRecords) loadPage(currentPage + 1);
+    }
+
+    // Enter key on API key field
+    document.getElementById('api-key').addEventListener('keydown', e => {
+      if (e.key === 'Enter') authenticate();
+    });
+  </script>
+</body>
+</html>

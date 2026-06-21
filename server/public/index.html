@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="LEDger">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#f4f8f5">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>LEDger Electricity Meter</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:        #f4f8f5;
+      --surface:   #ffffff;
+      --surface2:  #eaf3ec;
+      --border:    #c8ddd0;
+      --green:     #3a9d5c;
+      --green-dim: #2d8049;
+      --green-bright: #5cb878;
+      --text:      #2c3e35;
+      --text-dim:  #6b8f7b;
+      --yellow:    #d4940a;
+      --red:       #c93b3b;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 4px 16px 24px;
+    }
+
+    /* ── Stat cards ──────────────────────────────── */
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+
+    .stat-card .label {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .stat-card .value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--green);
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+    }
+
+    .stat-card .unit {
+      font-size: 0.85rem;
+      font-weight: 400;
+      color: var(--text-dim);
+      margin-left: 4px;
+    }
+
+    .stat-card.metric-card .value {
+      font-size: 2.25rem;
+      line-height: 1.05;
+      margin-top: 16px;
+    }
+
+    .stat-card.metric-card .unit {
+      font-size: 1rem;
+      margin-left: 6px;
+    }
+
+    .stat-card .sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    .stat-card.highlight {
+      border-color: var(--green-bright);
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+    }
+
+    .meter-link {
+      position: relative;
+      display: block;
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s, background 0.15s;
+    }
+
+    .meter-link::after {
+      content: "->";
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      background: rgba(58, 157, 92, 0.12);
+      color: var(--green);
+      font-size: 0.8rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .meter-link:hover {
+      border-color: var(--green);
+      box-shadow: 0 6px 18px rgba(58, 157, 92, 0.14);
+      transform: translateY(-1px);
+    }
+
+    .meter-link:focus-visible {
+      outline: 3px solid rgba(58, 157, 92, 0.28);
+      outline-offset: 3px;
+      border-color: var(--green);
+    }
+
+    .stat-card.reading-stale {
+      border-color: var(--red);
+      background: #fff1f1;
+      box-shadow: inset 0 0 0 1px rgba(201, 59, 59, 0.25);
+    }
+
+    .stat-card.reading-stale .label,
+    .stat-card.reading-stale .value {
+      color: var(--red);
+    }
+
+    .stat-card.reading-stale .unit,
+    .stat-card.reading-stale .sub {
+      color: #8c3434;
+    }
+
+    .stat-card.reading-stale.meter-link::after {
+      background: rgba(201, 59, 59, 0.1);
+      color: var(--red);
+    }
+
+    .reading-warning {
+      margin-top: 12px;
+      border-radius: 8px;
+      background: var(--red);
+      color: #fff;
+      padding: 10px 12px;
+      font-size: 0.85rem;
+      line-height: 1.35;
+      text-align: left;
+    }
+
+    .reading-warning strong {
+      display: block;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      margin-bottom: 2px;
+    }
+
+    .stat-card.power .value {
+      color: var(--yellow);
+    }
+
+    /* ── Sections ────────────────────────────────── */
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .charts .section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section h2 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    /* ── Charts ──────────────────────────────────── */
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .section-header h2 {
+      margin-bottom: 0;
+    }
+
+    .chart-tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .chart-tabs button {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chart-tabs button.active,
+    .chart-tabs button:hover {
+      background: var(--green);
+      color: #fff;
+      border-color: var(--green);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 280px;
+    }
+
+    .chart-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    .chart-empty[hidden] {
+      display: none;
+    }
+
+    /* ── ESP32 status ────────────────────────────── */
+
+    .esp-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      padding: 4px 24px;
+      border-radius: 20px;
+      margin-top: 8px;
+    }
+
+    .esp-status.online {
+      background: rgba(58, 157, 92, 0.12);
+      color: var(--green);
+    }
+
+    .esp-status.offline {
+      background: rgba(201, 59, 59, 0.1);
+      color: var(--red);
+    }
+
+    .esp-status.unknown {
+      background: rgba(107, 143, 123, 0.1);
+      color: var(--text-dim);
+    }
+
+    .esp-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .esp-status.online .esp-dot {
+      background: var(--green);
+      animation: blink 2s infinite;
+    }
+
+    .esp-status.offline .esp-dot {
+      background: var(--red);
+    }
+
+    .esp-status.unknown .esp-dot {
+      background: var(--text-dim);
+    }
+
+    .last-update {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 6px;
+      animation: blink 2s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px 0;
+      color: var(--text-dim);
+    }
+
+
+    /* ── Status bar ─────────────────────────────── */
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+
+    .timestamp-warning,
+    .esp-warning {
+      max-width: 760px;
+      margin: 0 auto 16px;
+      padding: 10px 12px;
+      border: 1px solid rgba(201, 59, 59, 0.25);
+      border-radius: 8px;
+      background: #fff1f1;
+      color: #8c3434;
+      font-size: 0.85rem;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .timestamp-warning strong,
+    .esp-warning strong {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .timestamp-warning[hidden],
+    .esp-warning[hidden] {
+      display: none;
+    }
+
+    @media (min-width: 1180px) {
+      .container {
+        max-width: 1280px;
+        padding-inline: 20px;
+      }
+
+      .dashboard-main {
+        display: grid;
+        grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(4, minmax(0, 1fr));
+        margin-bottom: 0;
+      }
+
+      .stats .stat-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 0;
+      }
+
+      .stats .stat-card .value {
+        font-size: 2.15rem;
+        line-height: 1;
+      }
+
+      .stats .stat-card .unit {
+        font-size: 1rem;
+      }
+
+      .stats .stat-card.metric-card .value {
+        font-size: 3.1rem;
+        margin-top: 14px;
+      }
+
+      .stats .stat-card.metric-card .unit {
+        font-size: 1.15rem;
+      }
+
+      .stats .stat-card .sub {
+        margin-top: 8px;
+        line-height: 1.25;
+      }
+
+      .section {
+        padding: 16px;
+      }
+
+      .chart-container {
+        height: 260px;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="app" class="loading">Loading data...</div>
+  </div>
+
+  <script>
+    const API_BASE = '/meter/api';
+    const STALE_READING_DAYS = 60;
+    const SUMMARY_REFRESH_MS = 10000;
+    const POWER_REFRESH_MS = 60 * 1000;
+    const CHART_REFRESH_MS = 15 * 60 * 1000;
+    const MOBILE_POWER_HOURS = 6;
+    const DESKTOP_POWER_HOURS = 24;
+    const MOBILE_POWER_MEDIA = '(max-width: 767px)';
+    let chart = null;
+    let powerChart = null;
+    let currentTab = 'daily';
+    let lastSummary = null;
+    let lastChartData = null;
+    let lastPowerPulses = null;
+    let chartRefreshInFlight = false;
+    let powerRefreshInFlight = false;
+    const mobilePowerQuery = window.matchMedia(MOBILE_POWER_MEDIA);
+    const els = {};
+
+    async function fetchJson(path) {
+      try {
+        const res = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.error('Fetch error:', err);
+        return null;
+      }
+    }
+
+    function formatPower(watts) {
+      watts = Number(watts) || 0;
+      if (watts >= 1000) return { value: (watts / 1000).toFixed(1), unit: 'kW' };
+      return { value: watts, unit: 'W' };
+    }
+
+    function formatKwh(wh) {
+      wh = Number(wh) || 0;
+      if (wh >= 1000) return (wh / 1000).toFixed(1);
+      return (wh / 1000).toFixed(2);
+    }
+
+    // Whole kWh, matching what the physical meter display shows.
+    function formatMeter(wh) {
+      wh = Number(wh) || 0;
+      return String(Math.round(wh / 1000));
+    }
+
+    function formatDate(iso) {
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatTimestampValue(value) {
+      if (!value) return 'no timestamp';
+      const d = new Date(value);
+      if (!Number.isFinite(d.getTime())) return value;
+      return formatDate(value);
+    }
+
+    function timestampIssueLabel(status) {
+      if (status === 'missing') return 'missing';
+      if (status === 'unparseable') return 'unreadable';
+      if (status === 'skew') return 'clock-skewed';
+      return 'invalid';
+    }
+
+    function manualReadingAgeDays(reading) {
+      if (!reading || !reading.timestamp) return null;
+      const t = new Date(reading.timestamp).getTime();
+      if (!Number.isFinite(t)) return null;
+      return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+    }
+
+    function renderShell() {
+      const app = document.getElementById('app');
+      app.classList.remove('loading');
+      app.innerHTML = `
+        <div class="status-bar">
+          <span id="espStatus" class="esp-status unknown"><span class="esp-dot"></span><span id="espStatusText">ESP32 loading...</span><span id="espInfo"></span></span>
+          &nbsp;&middot;&nbsp; Page updated: <span id="pageUpdated">--</span>
+        </div>
+        <div id="doorWarning" class="esp-warning" hidden>
+          <strong>Cabinet door open</strong> — pulse counting is paused.
+        </div>
+        <div id="lightWarning" class="esp-warning" hidden>
+          <strong>Light sensor unresponsive.</strong> The pulse sensor is not returning readings; consumption may be undercounted.
+        </div>
+        <div id="timestampWarning" class="timestamp-warning" hidden>
+          <strong>Pulse timestamp corrected.</strong>
+          <span id="timestampWarningText"></span>
+        </div>
+
+        <div class="dashboard-main">
+          <div class="stats">
+            <a id="meterCard" class="stat-card highlight meter-link" href="readings.html" title="Open meter readings" aria-label="Open meter readings">
+              <div class="label">Meter Reading (est.)</div>
+              <div class="value"><span id="meterReading">--</span><span class="unit">kWh</span></div>
+              <div id="lastReadingInfo" class="sub">Loading...</div>
+              <div id="readingWarning" class="reading-warning" hidden>
+                <strong>WARNING</strong>
+                <span id="readingWarningText"></span>
+              </div>
+            </a>
+            <div class="stat-card metric-card power">
+              <div class="label">Current Power</div>
+              <div class="value"><span id="currentPower">--</span><span id="currentPowerUnit" class="unit">W</span></div>
+            </div>
+            <div class="stat-card metric-card">
+              <div class="label">Today</div>
+              <div class="value"><span id="todayWh">--</span><span class="unit">kWh</span></div>
+            </div>
+            <div class="stat-card metric-card">
+              <div id="sinceLabel" class="label">Since --</div>
+              <div class="value"><span id="sinceWh">--</span><span class="unit">kWh</span></div>
+            </div>
+          </div>
+
+          <div class="charts">
+            <div class="section">
+              <h2 id="powerChartTitle">Power — Last 24 Hours</h2>
+              <div class="chart-container">
+                <canvas id="power-chart"></canvas>
+                <div id="power-chart-empty" class="chart-empty" hidden>No recent pulse data yet.</div>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-header">
+                <h2>Consumption</h2>
+                <div class="chart-tabs">
+                  <button type="button" data-tab="daily">Daily</button>
+                  <button type="button" data-tab="weekly">Weekly</button>
+                  <button type="button" data-tab="monthly">Monthly</button>
+                </div>
+              </div>
+              <div class="chart-container">
+                <canvas id="chart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      Object.assign(els, {
+        espStatus: document.getElementById('espStatus'),
+        espStatusText: document.getElementById('espStatusText'),
+        espInfo: document.getElementById('espInfo'),
+        pageUpdated: document.getElementById('pageUpdated'),
+        doorWarning: document.getElementById('doorWarning'),
+        lightWarning: document.getElementById('lightWarning'),
+        timestampWarning: document.getElementById('timestampWarning'),
+        timestampWarningText: document.getElementById('timestampWarningText'),
+        meterCard: document.getElementById('meterCard'),
+        meterReading: document.getElementById('meterReading'),
+        lastReadingInfo: document.getElementById('lastReadingInfo'),
+        readingWarning: document.getElementById('readingWarning'),
+        readingWarningText: document.getElementById('readingWarningText'),
+        currentPower: document.getElementById('currentPower'),
+        currentPowerUnit: document.getElementById('currentPowerUnit'),
+        todayWh: document.getElementById('todayWh'),
+        sinceLabel: document.getElementById('sinceLabel'),
+        sinceWh: document.getElementById('sinceWh'),
+        powerChartTitle: document.getElementById('powerChartTitle'),
+        powerChartCanvas: document.getElementById('power-chart'),
+        powerChartEmpty: document.getElementById('power-chart-empty'),
+        tabButtons: [...document.querySelectorAll('[data-tab]')],
+      });
+
+      els.tabButtons.forEach((button) => {
+        button.addEventListener('click', () => switchTab(button.dataset.tab));
+      });
+      updateTabButtons();
+    }
+
+    function getPowerWindowHours() {
+      return mobilePowerQuery.matches ? MOBILE_POWER_HOURS : DESKTOP_POWER_HOURS;
+    }
+
+    function updateSummary(data) {
+      lastSummary = data;
+
+      const lastReadingInfo = data.lastReading
+        ? `Since reading on ${formatDate(data.lastReading.timestamp)}: +${formatKwh(data.pulsesSinceReading)} kWh counted`
+        : 'No manual reading yet';
+      const lastReadingAgeDays = manualReadingAgeDays(data.lastReading);
+      const staleReading = lastReadingAgeDays !== null && lastReadingAgeDays > STALE_READING_DAYS;
+      const power = formatPower(data.currentWatts);
+      const sinceDate = new Date(data.sinceStartDay + 'T12:00:00');
+
+      els.meterReading.textContent = formatMeter(data.meterReading);
+      els.lastReadingInfo.textContent = lastReadingInfo;
+      els.meterCard.classList.toggle('reading-stale', staleReading);
+      els.readingWarning.hidden = !staleReading;
+      if (staleReading) {
+        els.readingWarningText.textContent =
+          `Last manual reading is ${lastReadingAgeDays} days old. This estimate is pulse-based and may have drifted; enter a fresh meter reading to recalibrate it.`;
+      }
+
+      els.currentPower.textContent = power.value;
+      els.currentPowerUnit.textContent = power.unit;
+      els.todayWh.textContent = formatKwh(data.todayWh);
+      els.sinceLabel.textContent = 'Since ' + sinceDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+      els.sinceWh.textContent = formatMeter(data.sinceWh);
+
+      let espStatusClass, espStatusText;
+      if (!data.esp.lastSeen) {
+        espStatusClass = 'unknown';
+        espStatusText = 'No ESP32 data yet';
+      } else if (data.esp.online) {
+        espStatusClass = 'online';
+        espStatusText = 'ESP32 online';
+      } else {
+        espStatusClass = 'offline';
+        espStatusText = data.esp.currentOutageSince
+          ? `ESP32 offline since ${formatDate(data.esp.currentOutageSince)}`
+          : `ESP32 last seen ${formatDate(data.esp.lastSeen)}`;
+      }
+      els.espStatus.className = `esp-status ${espStatusClass}`;
+      els.espStatusText.textContent = espStatusText;
+
+      const espInfoParts = [];
+      if (data.esp.firmwareVersion != null) espInfoParts.push(`fw v${data.esp.firmwareVersion}`);
+      if (typeof data.esp.light === 'number' && data.esp.light >= 0) espInfoParts.push(`light ${data.esp.light}`);
+      els.espInfo.textContent = espInfoParts.length ? '· ' + espInfoParts.join(' · ') : '';
+
+      els.doorWarning.hidden = data.esp.doorOpen !== true;
+      els.lightWarning.hidden = data.esp.light !== -1;
+
+      const timestampWarning = data.esp && data.esp.timestampWarning;
+      els.timestampWarning.hidden = !timestampWarning;
+      if (timestampWarning) {
+        const pulses = Number(timestampWarning.count) === 1 ? 'pulse' : 'pulses';
+        els.timestampWarningText.textContent =
+          ` ESP sent ${timestampWarning.count} ${pulses} with a ` +
+          `${timestampIssueLabel(timestampWarning.status)} timestamp ` +
+          `(${formatTimestampValue(timestampWarning.clientTimestamp)}); ` +
+          `server used ${formatTimestampValue(timestampWarning.usedTimestamp)}.`;
+      } else {
+        els.timestampWarningText.textContent = '';
+      }
+      els.pageUpdated.textContent = new Date().toLocaleTimeString();
+    }
+
+    function getChartDataset(data) {
+      let labels, values, label;
+      if (currentTab === 'daily') {
+        labels = data.daily.map(d => {
+          const date = new Date(d.day + 'T12:00:00');
+          return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        });
+        values = data.daily.map(d => Number((d.wh / 1000).toFixed(2)));
+        label = 'kWh / day';
+      } else if (currentTab === 'weekly') {
+        labels = data.weekly.map(d => {
+          const start = new Date(d.week_start + 'T12:00:00');
+          const end = new Date(start);
+          end.setDate(end.getDate() + 6);
+          const startStr = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          const endStr = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+          return `${startStr} – ${endStr}`;
+        });
+        values = data.weekly.map(d => Number((d.wh / 1000).toFixed(2)));
+        label = 'kWh / week';
+      } else {
+        labels = data.monthly.map(d => {
+          const [y, m] = d.month.split('-');
+          return new Date(y, m - 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+        });
+        values = data.monthly.map(d => Number((d.wh / 1000).toFixed(1)));
+        label = 'kWh / month';
+      }
+      return { labels, values, label };
+    }
+
+    function computePowerSeries(pulses) {
+      if (!pulses || pulses.length < 2) return [];
+
+      const points = [];
+      for (let i = 1; i < pulses.length; i++) {
+        const prev = pulses[i - 1];
+        const curr = pulses[i];
+        const tPrev = new Date(prev.timestamp).getTime();
+        const tCurr = new Date(curr.timestamp).getTime();
+        const gapSec = (tCurr - tPrev) / 1000;
+
+        if (gapSec < 1 || gapSec > 600) continue;
+
+        points.push({
+          time: tCurr,
+          watts: Math.round(curr.count * 3600 / gapSec),
+        });
+      }
+
+      return points;
+    }
+
+    function renderPowerChart(pulses) {
+      const hours = getPowerWindowHours();
+      const cutoff = Date.now() - hours * 60 * 60 * 1000;
+      const series = computePowerSeries(pulses).filter(p => p.time >= cutoff);
+
+      els.powerChartTitle.textContent = `Power — Last ${hours} Hours`;
+
+      if (series.length === 0) {
+        els.powerChartCanvas.hidden = true;
+        els.powerChartEmpty.hidden = false;
+        els.powerChartEmpty.textContent = `No pulse data in the last ${hours} hours.`;
+        if (powerChart) {
+          powerChart.destroy();
+          powerChart = null;
+        }
+        return;
+      }
+
+      els.powerChartCanvas.hidden = false;
+      els.powerChartEmpty.hidden = true;
+
+      const labels = series.map(p => {
+        const d = new Date(p.time);
+        return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      });
+      const values = series.map(p => p.watts);
+
+      if (powerChart) {
+        powerChart.data.labels = labels;
+        powerChart.data.datasets[0].data = values;
+        powerChart.update();
+        return;
+      }
+
+      powerChart = new Chart(els.powerChartCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Average power (W)',
+            data: values,
+            borderColor: 'rgba(58, 157, 92, 1)',
+            backgroundColor: 'rgba(58, 157, 92, 0.12)',
+            borderWidth: 1.5,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHitRadius: 8,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#ffffff',
+              borderColor: '#c8ddd0',
+              borderWidth: 1,
+              titleColor: '#2c3e35',
+              bodyColor: '#3a9d5c',
+              callbacks: {
+                label: ctx => `${ctx.parsed.y} W`,
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: '#6b8f7b',
+                font: { size: 11 },
+                maxTicksLimit: 12,
+              },
+              grid: { color: 'rgba(200, 221, 208, 0.5)' }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: '#6b8f7b',
+                font: { size: 11 },
+                callback: v => v + ' W',
+              },
+              grid: { color: 'rgba(200, 221, 208, 0.5)' }
+            }
+          }
+        }
+      });
+    }
+
+    function renderChart(data) {
+      const ctx = document.getElementById('chart').getContext('2d');
+      const { labels, values, label } = getChartDataset(data);
+
+      if (chart) {
+        chart.data.labels = labels;
+        chart.data.datasets[0].label = label;
+        chart.data.datasets[0].data = values;
+        chart.update();
+        return;
+      }
+
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label,
+            data: values,
+            backgroundColor: 'rgba(58, 157, 92, 0.5)',
+            borderColor: 'rgba(58, 157, 92, 1)',
+            borderWidth: 1,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#ffffff',
+              borderColor: '#c8ddd0',
+              borderWidth: 1,
+              titleColor: '#2c3e35',
+              bodyColor: '#3a9d5c',
+              callbacks: {
+                label: ctx => `${ctx.parsed.y} kWh`
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#6b8f7b', font: { size: 11 } },
+              grid: { color: 'rgba(200, 221, 208, 0.5)' }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: '#6b8f7b',
+                font: { size: 11 },
+                callback: v => v + ' kWh'
+              },
+              grid: { color: 'rgba(200, 221, 208, 0.5)' }
+            }
+          }
+        }
+      });
+    }
+
+    function updateTabButtons() {
+      els.tabButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.tab === currentTab);
+      });
+    }
+
+    function switchTab(tab) {
+      if (!['daily', 'weekly', 'monthly'].includes(tab)) return;
+      currentTab = tab;
+      updateTabButtons();
+      if (lastChartData) renderChart(lastChartData);
+      refreshChart();
+    }
+
+    async function refreshSummary() {
+      const data = await fetchJson('/summary');
+      if (data) updateSummary(data);
+    }
+
+    async function refreshPowerChart() {
+      if (powerRefreshInFlight) return;
+      powerRefreshInFlight = true;
+      try {
+        const data = await fetchJson('/pulses/recent');
+        if (data) {
+          lastPowerPulses = data.pulses;
+          renderPowerChart(lastPowerPulses);
+        }
+      } finally {
+        powerRefreshInFlight = false;
+      }
+    }
+
+    async function refreshChart() {
+      if (chartRefreshInFlight) return;
+      chartRefreshInFlight = true;
+      try {
+        const data = await fetchJson('/data');
+        if (data) {
+          lastChartData = data;
+          renderChart(data);
+          if (!lastSummary) updateSummary(data);
+        }
+      } finally {
+        chartRefreshInFlight = false;
+      }
+    }
+
+    function handlePowerWindowChange() {
+      if (lastPowerPulses) renderPowerChart(lastPowerPulses);
+    }
+
+    renderShell();
+    if (mobilePowerQuery.addEventListener) {
+      mobilePowerQuery.addEventListener('change', handlePowerWindowChange);
+    } else {
+      mobilePowerQuery.addListener(handlePowerWindowChange);
+    }
+    refreshSummary();
+    refreshPowerChart();
+    refreshChart();
+    setInterval(refreshSummary, SUMMARY_REFRESH_MS);
+    setInterval(refreshPowerChart, POWER_REFRESH_MS);
+    setInterval(refreshChart, CHART_REFRESH_MS);
+  </script>
+</body>
+</html>
